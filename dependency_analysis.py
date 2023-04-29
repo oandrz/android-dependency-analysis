@@ -60,6 +60,10 @@ if __name__ == '__main__':
     print(f"checking project {project_path}")
     modules_result_raw = find_module(project_path=project_path)
 
+    if len(modules_result_raw.items()) == 0:
+        print("Dependencies not found, are you sure this is the right folder ?")
+        sys.exit(1)
+
     module_dependencies_table = {}
 
     for module_name, gradle_file_path in modules_result_raw.items():
