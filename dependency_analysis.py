@@ -7,14 +7,48 @@ from graphviz import ExecutableNotFound, Source
 os.environ["PATH"] += os.pathsep + '/usr/local/Cellar/graphviz/8.0.3/bin/'
 
 
+def is_map_nav_project_root(abs_path):
+    target_path = "dax-map-navigation"
+
+    split_path = abs_path.split("/")
+    is_project_root = split_path[len(split_path) - 1] == target_path
+
+    return is_project_root
+
+
+def get_root_project_path(project_path):
+    abs_path = os.path.abspath(project_path)
+    if is_map_nav_project_root(abs_path):
+        return project_path
+
+    is_project_root = False
+    retry_count = 0
+    while not is_project_root:
+        if retry_count == 5:
+            print(f"There's an error with {project_path}")
+            sys.exit(1)
+        parent_dir = os.path.dirname(abs_path)
+        abs_path = os.path.abspath(parent_dir)
+        is_project_root = is_map_nav_project_root(abs_path)
+        retry_count += 1
+
+    return abs_path
+
+
 def map_module_name_to_alias(module_name, project_path):
     mapped_module = ""
-    for path in pathlib.Path(project_path).rglob("settings.gradle"):
+    root_project_path = get_root_project_path(project_path)
+    files = [f for f in pathlib.Path(root_project_path).rglob("settings.gradle")]
+
+    for path in files:
         with open(path, encoding='utf-8') as f:
             for line in f:
                 if module_name in line:
-                    splited_line = line.strip().split(':')
-                    mapped_module = splited_line[1].strip().replace('"', '')
+                    split_line = line.strip().split(':')
+                    mapped_module_cand = split_line[1].strip().replace('"', '')
+                    if mapped_module_cand.replace("geo-", "") == module_name:
+                        mapped_module = mapped_module_cand
+                        break
 
     return mapped_module.replace("'", "")
 
@@ -40,7 +74,7 @@ def extract_module_name_local_format(line):
 
         return local_line_split[1].replace("_", "-").replace(")", "").strip()
     except IndexError:
-        print(f"There was an error when processing this path {line}")
+        print(f"There was an error when processing this line of statement {line}")
 
 
 def extract_module_name_normal_format(line):
@@ -48,7 +82,7 @@ def extract_module_name_normal_format(line):
         local_line_split = line.split(":")
         return local_line_split[1].replace("_", "-").replace("'", "").replace('"', "").replace(")", "").strip()
     except IndexError:
-        print(f"There was an error when processing this path \n{line}")
+        print(f"There was an error when processing this statement \n{line}")
 
 
 def extract_module_name_from_line(file_line):
@@ -108,7 +142,7 @@ if __name__ == '__main__':
     dot_language = convert_to_dot(module_dependencies_table)
     try:
         source = Source(dot_language)
-        source.render(filename='dependencies', directory=f"{project_path}/output", format='jpg')
-        print(f"Graph successfully generated at {project_path}/output")
+        source.render(filename='dependencies', directory=f"{project_path}/build/outputs", format='jpg')
+        print(f"Graph successfully generated at {project_path}/build/outputs")
     except ExecutableNotFound:
         print('Graphviz executable not found, please install by using brew install graphviz')
