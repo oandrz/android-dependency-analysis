@@ -7,6 +7,18 @@ from graphviz import ExecutableNotFound, Source
 os.environ["PATH"] += os.pathsep + '/usr/local/Cellar/graphviz/8.0.3/bin/'
 
 
+def map_module_name_to_alias(module_name, project_path):
+    mapped_module = ""
+    for path in pathlib.Path(project_path).rglob("settings.gradle"):
+        with open(path, encoding='utf-8') as f:
+            for line in f:
+                if module_name in line:
+                    splited_line = line.strip().split(':')
+                    mapped_module = splited_line[1].strip().replace('"', '')
+
+    return mapped_module.replace("'", "")
+
+
 def find_module(project_path):
     project_to_gradle_file = {}
     for full_path in pathlib.Path(project_path).rglob("build.gradle"):
@@ -14,16 +26,36 @@ def find_module(project_path):
         if folder == project_path:
             continue
         module_name = os.path.split(folder)[1]
+        if "dax-map-navigation" in project_path:
+            module_name = map_module_name_to_alias(module_name, project_path)
         project_to_gradle_file[module_name] = full_path
     return project_to_gradle_file
 
 
-def extract_module_name_from_line(file_line):
-    local_line_split = file_line.split("local.")
-    if len(local_line_split) <= 1:
-        return ""
+def extract_module_name_local_format(line):
+    try:
+        local_line_split = line.split("local.")
+        if len(local_line_split) <= 1:
+            return ""
 
-    return local_line_split[1].replace("_", "-").replace(")", "").strip()
+        return local_line_split[1].replace("_", "-").replace(")", "").strip()
+    except IndexError:
+        print(f"There was an error when processing this path {line}")
+
+
+def extract_module_name_normal_format(line):
+    try:
+        local_line_split = line.split(":")
+        return local_line_split[1].replace("_", "-").replace("'", "").replace('"', "").replace(")", "").strip()
+    except IndexError:
+        print(f"There was an error when processing this path \n{line}")
+
+
+def extract_module_name_from_line(file_line):
+    if "local." in file_line:
+        return extract_module_name_local_format(line=file_line)
+    else:
+        return extract_module_name_normal_format(line=file_line)
 
 
 def find_dependencies_of_module(file_path, all_modules):
@@ -31,9 +63,12 @@ def find_dependencies_of_module(file_path, all_modules):
 
     with open(file_path, encoding='utf-8') as f:
         for line in f:
+            if "project" not in line:
+                continue
+
+            module_name_from_file = extract_module_name_from_line(line)
             for module in all_modules:
-                module_name_from_file = extract_module_name_from_line(line)
-                if module_name_from_file == module and "project" in line:
+                if module_name_from_file == module:
                     module_dependencies.append(module.replace("-", "_"))
     return module_dependencies
 
